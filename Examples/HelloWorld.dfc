@@ -1,0 +1,13 @@
+# Simple Hello World example
+
+node Stdout(in) {
+     in -> python{
+     	# Raw python code thats use the named arguemnt given
+	print in
+     }
+}
+
+node PrintHelloWorld () {
+     # Initialise a data node and attach to a stdout node
+     "Hello World" -> in:Stdout
+}
