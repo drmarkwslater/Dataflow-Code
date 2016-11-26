@@ -1,13 +1,15 @@
 # Simple Hello World example
 
-node Stdout(in) {
-     in -> python{
-     	# Raw python code thats use the named arguemnt given
-	print in
-     }
+node PrintHelloWorld ()() {
+    # Initialise a data node and attach to a stdout node
+    "Hello World" -> in:Stdout<a>
 }
 
-node PrintHelloWorld () {
-     # Initialise a data node and attach to a stdout node
-     "Hello World" -> in:Stdout
+
+node Stdout(in)() {
+    in -> __python__("
+# Raw python code that uses the named argument given
+print in
+")
 }
+
