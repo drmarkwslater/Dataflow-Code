@@ -1,15 +1,27 @@
 # Simple Hello World example
 
-node PrintHelloWorld ()() {
-    # Initialise a data node and attach to a stdout node
-    "Hello World" -> in:Stdout<a>
-}
-
-
-node Stdout(in)() {
-    in -> __python__("
+node Stdout(instr)() {
+__python__("
 # Raw python code that uses the named argument given
-print in
+print instr
 ")
 }
 
+node Add(var1, var2)(sum) {
+__python__("
+sum = var1 + var2
+")
+}
+
+# --------------------------------------------------------------------
+node PrintHelloWorld ()() {
+    # Initialise a data node and attach to a stdout node
+    "Hello World" -> instr:Stdout<a>
+}
+
+# --------------------------------------------------------------------
+node AddTwoNumbers ()() {
+    # Use an 'Add' node to combine two numbers
+    3.6 -> var1:Add<a>
+    8.7 -> var2:Add<a>:sum -> instr:Stdout
+}

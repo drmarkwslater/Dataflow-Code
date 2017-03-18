@@ -8,8 +8,18 @@ import os
 sys.path.append(os.path.join(os.path.dirname(__file__), '../python'))
 
 from dfc_parser import label_check, process_bracketed_csv_list, preprocess_channel_links
+from Runtime import getRuntime
+from Node import Node
+from PythonNode import PythonNode
 
+
+print "---------------------------------------------------"
+print "Compiling..."
+print "---------------------------------------------------\n"
 toks = shlex.shlex(open("examples/HelloWorld.dfc").read())
+
+# Set up the runtime
+curr_runtime = getRuntime()
 
 # Go over the toks and create any nodes
 toks_list = list(toks)
@@ -50,14 +60,29 @@ while idx < len(toks_list):
 
         idx += new_idx
 
-        # now process the channel links
+        # if not, process the channel links
         try:
             link_toks, new_idx = preprocess_channel_links(toks_list[idx:])
         except SyntaxError as err:
             print "[error] Syntax error in channel link definition for node '%s': %s" % (err, name)
             break
 
-        print link_toks
         idx += new_idx
-        print toks_list[idx:]
-        break
+
+        # Create the given node and add to runtime
+        nd = None
+        if link_toks[0][:10] == "__python__":
+            # pure python node
+            nd = PythonNode(name, in_data_chans, out_data_chans, link_toks[0])
+        else:
+            nd = Node(name, in_data_chans, out_data_chans, link_toks)
+
+        curr_runtime.add_node(nd)
+
+
+# Now set the Runtime going
+print "\n\n\n---------------------------------------------------"
+print "Executing Runtime..."
+print "---------------------------------------------------\n"
+
+curr_runtime.execute()

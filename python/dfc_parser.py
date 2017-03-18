@@ -60,3 +60,35 @@ def preprocess_channel_links(in_toks):
             idx += 1
 
     raise SyntaxError("Reached end of channel link section without finding '}'")
+
+
+def split_node_def_in(node_def):
+
+    # split the input channel
+    in_chan = node_def.split(':')[0]
+
+    # now the name
+    node_name = node_def.split(':')[1]
+    node_label = ""
+    if node_def.split(':')[1].find('<') > -1:
+        # we have a label as well
+        node_label = node_name[node_name.find('<') + 1:node_name.find('>')]
+        node_name = node_def.split(':')[1].split('<')[0]
+
+    return in_chan, node_name, node_label
+
+
+def split_node_def_out(node_def):
+
+    # split the output channel
+    out_chan = node_def.split(':')[-1]
+
+    # now the name
+    node_name = node_def.split(':')[-2]
+    node_label = ""
+    if node_def.split(':')[2].find('<') > -1:
+        # we have a label as well
+        node_label = node_name[node_name.find('<') + 1:node_name.find('>')]
+        node_name = node_def.split(':')[-2].split('<')[0]
+
+    return out_chan, node_name, node_label
