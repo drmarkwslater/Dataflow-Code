@@ -4,16 +4,23 @@ import copy
 
 from dfc_parser import split_node_def_in, split_node_def_out
 from Runtime import getRuntime
-from Channel import OutputChannel, InputChannel
+from Channel import Channel
 
 
 def create_special_node(node_def):
     """Check if we can create a 'special' node from this def"""
+    from ConstNode import ConstNode
     nd = None
     if node_def[0] == '"' and node_def[-1] == '"':
         # String constant node
-        from StringConstNode import StringConstNode
-        nd = StringConstNode(node_def.strip('"'))
+        nd = ConstNode(node_def)
+    else:
+        try:
+            # can we create a number out of this?
+            val = float(node_def)
+            nd = ConstNode(node_def)
+        except ValueError:
+            pass
 
     return nd
 
@@ -48,6 +55,7 @@ class Node:
         # set the name and label
         self.name_ = name
         self.label_ = label
+        self.progress_ = False
 
         print "[node] Creating Node '%s'..." % name
 
@@ -58,9 +66,9 @@ class Node:
         self.in_channels_ = []
         self.out_channels_ = []
         for chan in in_data_chans:
-            self.in_channels_.append(InputChannel(chan, self))
+            self.in_channels_.append(Channel(chan, self))
         for chan in out_data_chans:
-            self.out_channels_.append(OutputChannel(chan, self))
+            self.out_channels_.append(Channel(chan, self))
 
         # now go through and create all the links and referenced nodes
         # General form of:  node_type<label>:out_chan -> in_chan:node_type<label>:...
@@ -69,17 +77,37 @@ class Node:
 
             if link_toks[idx] == "->":
                 # We have a link so process the input and output defs and create the nodes if required
-                out_nd, out_nd_chan = self.parse_def_and_create_node(link_toks[idx-1], out_node=True)
-                in_nd, in_nd_chan = self.parse_def_and_create_node(link_toks[idx+1], out_node=False)
+                out_nd, out_chan_name = self.parse_def_and_create_node(link_toks[idx-1], out_node=True)
+                in_nd, in_chan_name = self.parse_def_and_create_node(link_toks[idx+1], out_node=False)
 
-                # Set the channel link - special case for self input/output channels
-                # TODO: Straight pass through node will not work
-                if out_nd is self:
-                    self.find_in_channel(out_nd_chan).set_pass_through(in_nd.find_in_channel(in_nd_chan))
-                elif in_nd is self:
-                    self.find_out_channel(in_nd_chan).set_pass_through(out_nd.find_out_channel(out_nd_chan))
+                # Find the in/out channel
+                if out_nd == self:
+                    # this is the input channel for the container node
+                    out_chan = out_nd.find_in_channel(out_chan_name)
                 else:
-                    set_channel_link(out_nd, out_nd_chan, in_nd, in_nd_chan)
+                    out_chan = out_nd.find_out_channel(out_chan_name)
+
+                if in_nd == self:
+                    # this is the output channel for the container node
+                    in_chan = in_nd.find_out_channel(in_chan_name)
+                else:
+                    in_chan = in_nd.find_in_channel(in_chan_name)
+
+                # are these valid channels?
+                if not out_chan:
+                    raise SyntaxError("[node] Error: Couldn't find output channel '%s' in node '%s'" %
+                                      (out_chan_name, out_nd.name_))
+
+                if not in_chan:
+                    raise SyntaxError("[node] Error: Couldn't find input channel '%s' in node '%s'" %
+                                      (in_chan_name, in_nd.name_))
+
+                out_chan.add_output_link(in_chan)
+                in_chan.set_input_link(out_chan)
+
+    def link_nodes(self, nd_links):
+        """Set any links up between nodes (e.g. Combiner -> Splitter)"""
+        pass
 
     def parse_def_and_create_node(self, node_def, out_node=True):
         """Go over the given string and return the appropriate created node"""
@@ -101,19 +129,20 @@ class Node:
 
             # Check for any previously labelled node
             if node_label:
-                node_found = False
                 for nd in self.nodes_:
-                    if nd.label_ == node_label:
-                        print "[node] Using node '%s<%s>' with output channel '%s' to node '%s'" % \
+                    if nd.label_ == node_label and nd.name_ == node_name:
+                        print "[node] Using node '%s<%s>' with output channel '%s' in node def '%s'" % \
                               (nd.name_, nd.label_, nd_chan, self.name_)
                         return nd, nd_chan
 
-                print "[node] Creating node with label '%s' in node def '%s'" % (node_label, self.name_)
+                print "[node] Creating node, type '%s', with label '%s' in node def '%s'" % (node_name, node_label, self.name_)
 
-            elif out_node and node_def.split(':') == 3:
+            elif out_node and len(node_def.split(':')) == 3:
                 # we have a chained node def so we must have already created this output node
                 nd = self.nodes_[-1]
                 return nd, nd_chan
+            else:
+                print "[node] Creating node of type '%s' in node def '%s'" % (node_name, self.name_)
 
             # if not create a new one of this type and add to the node list
             # Check the runtime for this node
@@ -124,7 +153,16 @@ class Node:
                                   (node_name, self.name_))
             # Copy it
             nd = copy.deepcopy(tmp_nd)
-            nd.label = node_label
+
+            # if any labels are the same, link them
+            nd_links = []
+            for nd2 in self.nodes_:
+                if nd2.label_ == node_label:
+                    nd_links.append(nd2)
+            nd.link_nodes(nd_links)
+
+            # set the label
+            nd.label_ = node_label
 
             # append to the list
             self.nodes_.append(nd)
@@ -147,23 +185,25 @@ class Node:
 
         return None
 
-    def is_ready(self):
+    def is_ready(self, chan_name = ""):
         """Return if the node is ready or not"""
         return self.status_ == Node.Ready_
 
     def set_not_ready(self):
-        """set this node as not readyt"""
+        """set this node as not ready"""
         self.status_ = Node.NotReady_
 
     def process(self):
         """Attempt to process this node. Just go over the contained nodes and attempt to process non-ready ones"""
+    
         # Check if all inputs are ready
         for chan in self.in_channels_:
-            if not chan.input_link_.parent_node_.is_ready():
+            if not chan.get_input_link().is_parent_ready():
                 return
-
+        
         # Loop over all the nodes
         set_ready = True
+        self.progress_ = False
         for nd in self.nodes_:
 
             # If the node is Ready, just move on
@@ -173,6 +213,8 @@ class Node:
             # It's not ready, so attempt to process
             set_ready = False
             nd.process()
+            if (hasattr(nd, "progress_") and nd.progress_) or nd.is_ready():
+                self.progress_ = True
 
         # if all nodes have been processed, set ourselves ready
         if set_ready:

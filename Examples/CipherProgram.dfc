@@ -6,25 +6,24 @@ print instr
 ")
 }
 
-node PrintHelloWorld ()() {
-    # Initialise a data node and attach to a stdout node
-    "Hello World" -> instr:Stdout<a>
+node Stdin(trigger)(outstr) {
+__python__("
+outstr = raw_input('Enter Text:')
+")
 }
 
-# --------------------------------------------------------------------
+node AndBool(input1, input2)(output) {
+__python__("
+output = (input1 and input2)
+")
+}
+
 node Add(var1, var2)(total) {
 __python__("
 total = var1 + var2
 ")
 }
 
-node AddTwoNumbers ()() {
-    # Use an 'Add' node to combine two numbers
-    3.6 -> var1:Add<a>
-    8.7 -> var2:Add<a>:total -> instr:Stdout
-}
-
-# --------------------------------------------------------------------
 node UpperCase(instr)(outstr) {
 __python__("
 outstr = instr.upper()
@@ -54,11 +53,6 @@ node TransliterateInput (instr)(outstr) {
     instr:NumToWord:outstr -> instr:RemoveNonAlpha:outstr -> input:CombinerNode<a>:output ->
     outstr
 }
-
-node TestTransliterateInput()() {
-    "   ASDHFj08qHOHUFE80IPFJE[S]HLRT" -> instr:TransliterateInput:outstr -> instr:Stdout
-}
-# --------------------------------------------------------------------
 
 node CommandLineOptions()(cmd_opts) {
 __python__("
@@ -133,20 +127,71 @@ node GetVersion(opt_list)(version_requested, unused_list) {
     SplitItemFromList<a>:remain_list -> unused_list
 }
 
+node ReadFileText(filename)(outstr) {
+__python__("
+fname = filename
+if type(filename) == list:
+    fname = filename[0]
+outstr = open(fname).read()
+")
+}
+
+node CharToNumber(char)(num) {
+__python__("
+num = ord(char) - 65
+")
+}
+
+node NumberToChar(num)(char) {
+__python__("
+char = chr(num % 26 + 65) 
+")
+}
+
+node CaesarCipher(input, key)(output) {
+    input -> input:SplitterNode<a>:output -> char:CharToNumber:num ->
+    var1:Add<b>:total -> num:NumberToChar:char -> input:CombinerNode<a>:output ->
+    output
+
+    key -> var2:Add<b>
+}
+
+node ProcessCommandLine(cmd_opts)(input_file, output_file, help_requested, version_requested) {
+    cmd_opts -> opt_list:GetInputFile<a>:unused_list ->
+    opt_list:GetOutputFile<b>:unused_list ->
+    opt_list:GetHelp<c>:unused_list -> 
+    opt_list:GetVersion<d>:version_requested -> version_requested
+
+    GetHelp<c>:help_requested -> help_requested
+    GetInputFile<a>:input_file -> input_file
+    GetOutputFile<b>:output_file -> output_file
+}
+
 node CipherProgram()() {
-    CommandLineOptions:cmd_opts -> opt_list:GetInputFile<a>:unused_list ->
-    opt_list:GetOutputFile<f>:unused_list ->
-    opt_list:GetHelp<b>:unused_list -> opt_list:GetVersion<d>
+    CommandLineOptions:cmd_opts -> cmd_opts:ProcessCommandLine<a>
 
-    GetInputFile<a>:input_file -> instr:Stdout
+    ProcessCommandLine<a>:version_requested -> input1:AndBool<b>
+    ProcessCommandLine<a>:help_requested -> input2:AndBool<b>
+    AndBool<b>:output -> test:OutputCondNode<ocd1>
+    ProcessCommandLine<a>:input_file -> input:OutputCondNode<ocd1>
 
-    GetOutputFile<f>:output_file -> instr:Stdout
+    OutputCondNode<ocd1>:false_out -> input:OutputCondNode<ocd2>:false_out ->
+    trigger:Stdin:outstr -> input1:DataSelectorNode<ds>
 
-    GetHelp<b>:help_requested -> exit_flag:Exit<c>
+    OutputCondNode<ocd1>:false_out -> test:OutputCondNode<ocd2>:true_out ->
+    filename:ReadFileText:outstr -> input2:DataSelectorNode<ds>
+
+    DataSelectorNode<ds>:output -> instr:TransliterateInput:outstr -> 
+    input:CaesarCipher<cc>:output -> instr:Stdout
+    5 -> key:CaesarCipher<cc>
+
+    ProcessCommandLine<a>:output_file -> instr:Stdout
+
+    ProcessCommandLine<a>:help_requested -> exit_flag:Exit<c>
     "You asked for help" -> message:Exit<c>
     0 -> ret_code:Exit<c>
 
-    GetVersion<d>:version_requested -> exit_flag:Exit<e>
+    ProcessCommandLine<a>:version_requested -> exit_flag:Exit<e>
     "Version 0.1" -> message:Exit<e>
     0 -> ret_code:Exit<e>
 }

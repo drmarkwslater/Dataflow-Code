@@ -16,7 +16,7 @@ from PythonNode import PythonNode
 print "---------------------------------------------------"
 print "Compiling..."
 print "---------------------------------------------------\n"
-toks = shlex.shlex(open("examples/HelloWorld.dfc").read())
+toks = shlex.shlex(open("examples/CipherProgram.dfc").read())
 
 # Set up the runtime
 curr_runtime = getRuntime()
@@ -66,7 +66,6 @@ while idx < len(toks_list):
         except SyntaxError as err:
             print "[error] Syntax error in channel link definition for node '%s': %s" % (err, name)
             break
-
         idx += new_idx
 
         # Create the given node and add to runtime
@@ -74,6 +73,7 @@ while idx < len(toks_list):
         if link_toks[0][:10] == "__python__":
             # pure python node
             nd = PythonNode(name, in_data_chans, out_data_chans, link_toks[0])
+
         else:
             nd = Node(name, in_data_chans, out_data_chans, link_toks)
 

@@ -1,5 +1,4 @@
 # The runtime environment
-
 def getRuntime():
     """return the current runtime or create it if it's not there"""
     if not getRuntime.curr_runtime_:
@@ -13,6 +12,22 @@ class Runtime:
 
     def __init__(self):
         self.node_list_ = []
+
+        # Add some system nodes in
+        from SplitterNode import SplitterNode
+        self.add_node(SplitterNode())
+
+        from CombinerNode import CombinerNode
+        self.add_node(CombinerNode())
+
+        from OutputCondNode import OutputCondNode
+        self.add_node(OutputCondNode())
+
+        from DataSelectorNode import DataSelectorNode
+        self.add_node(DataSelectorNode())
+
+        #from InputCondNode import InputCondNode
+        #self.add_node(InputCondNode())
 
     def add_node(self, node):
         """Add a node to the current runtime"""
@@ -51,7 +66,9 @@ class Runtime:
                 if nd.is_ready() or len(nd.in_channels_) > 0:
                     continue
 
-                term_flag = False
-
-                # It's not ready, so attempt to process
+                # It's not ready, so attempt to process and if we've made progress, keep going
                 nd.process()
+
+                if nd.progress_:
+                    term_flag = False
+

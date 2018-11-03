@@ -40,8 +40,9 @@ def preprocess_channel_links(in_toks):
     out_toks = []
     idx = 1
     next_tok = ""
+    in_num = False
+    in_python = False
     while idx < len(in_toks):
-
         # end of in_toks list?
         if in_toks[idx] == "}":
             if next_tok == "":
@@ -55,8 +56,30 @@ def preprocess_channel_links(in_toks):
             next_tok = ""
             out_toks.append('->')
             idx += 2
-        else:
+            in_num = False
+        elif in_toks[idx].isdigit() and not in_num:
+            # Check for numeric constants
+            out_toks.append(next_tok)
+            next_tok = in_toks[idx]
+            idx += 1
+            in_num = True
+        elif in_toks[idx] == '__python__' and not in_python:
+            # check if we are in a python node
+            if next_tok:
+                out_toks.append(next_tok)
+            next_tok = in_toks[idx]
+            idx += 1
+            in_python = True
+        elif ':' in in_toks[idx-1:idx+2] or '<' in in_toks[idx-1:idx+1] or '>' in in_toks[idx:idx+2] or in_num\
+                or in_python:
+            # Toks to be added together
             next_tok += in_toks[idx]
+            idx += 1
+        else:
+            # preserve the spaces
+            if next_tok:
+                out_toks.append(next_tok)
+            next_tok = in_toks[idx]
             idx += 1
 
     raise SyntaxError("Reached end of channel link section without finding '}'")
@@ -86,7 +109,7 @@ def split_node_def_out(node_def):
     # now the name
     node_name = node_def.split(':')[-2]
     node_label = ""
-    if node_def.split(':')[2].find('<') > -1:
+    if node_def.split(':')[-2].find('<') > -1:
         # we have a label as well
         node_label = node_name[node_name.find('<') + 1:node_name.find('>')]
         node_name = node_def.split(':')[-2].split('<')[0]
